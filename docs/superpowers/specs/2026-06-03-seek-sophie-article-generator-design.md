@@ -42,14 +42,14 @@ CRUD articles          ──────► GET/POST/PATCH/DELETE
 | Frontend | Next.js 15 (App Router), TypeScript, Tailwind CSS, shadcn/ui |
 | State management | Jotai |
 | Backend | FastAPI (Python 3.12) |
-| Document parsing | python-docx (text + comments + images), mammoth (fallback) |
+| Document parsing | python-docx (primary: text + comments + images), mammoth (fallback if python-docx fails to open file) |
 | LLM | OpenAI GPT-4o (Structured Outputs) |
 | LLM summarisation (chunking) | GPT-4o-mini |
 | Auth | Supabase Auth (magic link / invite-only) |
 | Database | Supabase Postgres |
 | File storage | Supabase Storage |
 | Frontend deploy | Vercel |
-| Backend deploy | Railway or Fly.io (Dockerised) |
+| Backend deploy | Railway (Dockerised) |
 
 ---
 
@@ -189,6 +189,8 @@ class ArticleOutput(BaseModel):
 
 On failure: retry once. If the second attempt fails, return HTTP 500 with a retry-friendly error.
 
+**Pydantic → DB mapping:** The Pydantic model wraps each field's value and sourcing metadata together. When saving to Postgres, the FastAPI service splits them: plain values go into their respective columns (`title`, `hook`, `best_for`, etc.), and all sourcing metadata is collapsed into the single `sourced_fields` jsonb column as `{field_name: {sourced: bool, source_ref: text}}`. The two representations are always kept in sync on every save.
+
 ### Stage 3 — Save (`POST /articles`)
 
 - Article row written to Supabase with `status: 'draft'`
@@ -232,7 +234,7 @@ Authors must actively dismiss or correct amber fields. Publishing an article wit
 
 - Each field is inline-editable (click to edit)
 - Preview re-renders live as fields are edited
-- `PATCH /articles/{id}` called on every save
+- `PATCH /articles/{id}` called on field blur (auto-save when author moves away from a field) and on explicit Save button click
 - Amber = `sourced: false` — author must verify
 - Regenerate button disabled and greyed at limit (3/3)
 
@@ -300,7 +302,7 @@ Frontend (Vercel):
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `NEXT_PUBLIC_API_URL` (FastAPI base URL)
 
-Backend (Railway/Fly.io):
+Backend (Railway):
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_KEY`
 - `SUPABASE_JWT_SECRET`
