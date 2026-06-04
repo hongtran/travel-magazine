@@ -3,18 +3,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.routers import articles
 from app.routers import pipeline
 from app.auth import get_current_user_id
-from app.config import settings
 
 app = FastAPI(title="Travel Magazine API")
 
-origins = ["http://localhost:3000"]
-if settings.frontend_url not in origins:
-    origins.append(settings.frontend_url)
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
