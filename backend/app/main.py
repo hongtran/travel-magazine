@@ -1,6 +1,7 @@
 import os
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from app.routers import articles
 from app.auth import get_current_user_id
 
 app = FastAPI(title="Travel Magazine API")
@@ -13,6 +14,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(articles.router)
 
 @app.get("/health")
 def health():
