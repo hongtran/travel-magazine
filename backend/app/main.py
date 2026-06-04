@@ -8,7 +8,7 @@ app = FastAPI(title="Travel Magazine API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://travel-magazine-steel.vercel.app"],
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
