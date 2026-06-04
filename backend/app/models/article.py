@@ -50,3 +50,5 @@ class ArticleUpdate(BaseModel):
     sourced_fields: dict | None = None
     images: list[dict] | None = None
     regeneration_count: int | None = None
+    word_count_target: int | None = None
+    original_file_url: str | None = None
