@@ -1,4 +1,5 @@
 'use client'
+import { useState, useEffect } from 'react'
 import { Input } from '@/components/ui/input'
 
 interface Props {
@@ -7,7 +8,13 @@ interface Props {
 }
 
 export function KeyFactsEditor({ facts, onChange }: Props) {
-  const entries = Object.entries(facts ?? {})
+  const [local, setLocal] = useState<Record<string, string>>(facts ?? {})
+
+  useEffect(() => {
+    setLocal(facts ?? {})
+  }, [facts])
+
+  const entries = Object.entries(local)
   if (!entries.length) return null
 
   return (
@@ -22,8 +29,9 @@ export function KeyFactsEditor({ facts, onChange }: Props) {
           </span>
           <Input
             className="text-sm h-7"
-            defaultValue={v}
-            onBlur={e => onChange({ ...(facts ?? {}), [k]: e.target.value })}
+            value={v ?? ''}
+            onChange={e => setLocal(prev => ({ ...prev, [k]: e.target.value }))}
+            onBlur={e => onChange({ ...local, [k]: e.target.value })}
           />
         </div>
       ))}

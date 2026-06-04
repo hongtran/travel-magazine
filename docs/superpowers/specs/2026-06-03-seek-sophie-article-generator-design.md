@@ -28,7 +28,7 @@ CRUD articles          ──────► GET/POST/PATCH/DELETE
 **Auth flow:**
 1. User logs in via Supabase Auth on the frontend → receives a signed JWT
 2. Every request to FastAPI includes `Authorization: Bearer <jwt>`
-3. FastAPI validates the JWT using the Supabase JWT secret (via `python-jose`)
+3. FastAPI validates the JWT using Supabase's JWKS endpoint (`/auth/v1/.well-known/jwks.json`) with ES256 — no shared secret needed
 4. Extracted `user_id` scopes all database queries
 
 **Rule:** Frontend talks to Supabase for auth only. All article data flows through FastAPI.
@@ -210,7 +210,9 @@ Authors must actively dismiss or correct amber fields. Publishing an article wit
 ## Editor UI — Split View (50/50)
 
 ```
-┌────────────────────────┬────────────────────────┐
+┌─────────────────────────────────────────────────┐
+│  ← All Articles          Saving…  [Regen] [Pub] │  ← toolbar
+├────────────────────────┬────────────────────────┤
 │  FIELDS                │  PREVIEW               │
 │                        │                        │
 │  Title          [edit] │  Komodo by Boat:       │
@@ -227,16 +229,22 @@ Authors must actively dismiss or correct amber fields. Publishing an article wit
 │  Key Facts      [edit] │  💰 $120–180  ⏱ 5–7d  │
 │  Images         [list] │  [image thumbnails]    │
 │                        │                        │
-│  [Regenerate 2/3]      │                        │
-│  [Save Draft] [Publish]│                        │
 └────────────────────────┴────────────────────────┘
 ```
 
+- **Toolbar left:** `← All Articles` link navigates back to `/dashboard`
 - Each field is inline-editable (click to edit)
 - Preview re-renders live as fields are edited
 - `PATCH /articles/{id}` called on field blur (auto-save when author moves away from a field) and on explicit Save button click
 - Amber = `sourced: false` — author must verify
 - Regenerate button disabled and greyed at limit (3/3)
+
+## New Article Page (`/articles/new`)
+
+- `← All Articles` link at the top navigates back to `/dashboard`
+- Page heading: "New article"
+- Subheading: "Upload your notes and we'll generate a structured magazine article."
+- `.docx` upload widget below the heading
 
 ---
 
@@ -304,8 +312,7 @@ Frontend (Vercel):
 
 Backend (Railway):
 - `SUPABASE_URL`
-- `SUPABASE_SERVICE_KEY`
-- `SUPABASE_JWT_SECRET`
+- `SUPABASE_SERVICE_KEY` (secret key from Settings → API Keys)
 - `OPENAI_API_KEY`
 
 ---

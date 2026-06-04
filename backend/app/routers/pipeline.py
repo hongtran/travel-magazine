@@ -6,7 +6,7 @@ from app.db import get_supabase
 from app.services.parser import parse_docx
 from app.services.chunker import chunk_and_summarise
 from app.services.generator import generate_article
-from app.services.storage import upload_docx, move_pending_images
+from app.services.storage import upload_docx, upload_pending_image, move_pending_images
 
 router = APIRouter(prefix="/articles", tags=["pipeline"])
 
@@ -43,10 +43,15 @@ async def parse(
     file_url = upload_docx(sb, file_bytes, user_id)
     text = await chunk_and_summarise(parsed.text)
 
+    pending_image_paths = [
+        upload_pending_image(sb, img.blob, img.filename, img.content_type)
+        for img in parsed.images
+    ]
+
     return {
         "text": text,
         "file_url": file_url,
-        "pending_image_paths": [],
+        "pending_image_paths": pending_image_paths,
         "warning": warning,
     }
 
@@ -57,6 +62,7 @@ async def generate(
 ):
     text = body.get("text", "")
     file_url = body.get("file_url")
+    pending_image_paths: list[str] = body.get("pending_image_paths") or []
     if not text:
         raise HTTPException(status_code=422, detail="text is required")
 
@@ -80,7 +86,9 @@ async def generate(
         raise HTTPException(status_code=500, detail="Generation failed. Please retry.")
 
     article_id = article_id_existing or str(uuid.uuid4())
-    row = _to_db_row(output, user_id, file_url, config)
+
+    images = move_pending_images(sb, pending_image_paths, article_id) if pending_image_paths else []
+    row = _to_db_row(output, user_id, file_url, config, images)
 
     if article_id_existing:
         row["regeneration_count"] = (row.get("regeneration_count") or 0) + 1
@@ -88,9 +96,10 @@ async def generate(
     else:
         sb.table("articles").insert({**row, "id": article_id}).execute()
 
-    return {"id": article_id, "article": {**row, "id": article_id, "images": []}}
+    return {"id": article_id, "article": {**row, "id": article_id}}
 
-def _to_db_row(output, user_id: str, file_url: str | None, config: dict) -> dict:
+def _to_db_row(output, user_id: str, file_url: str | None, config: dict, images: list[dict] | None = None) -> dict:
+    print("LLM output", output)
     def val(f):
         return f.value if f else None
 
@@ -100,8 +109,8 @@ def _to_db_row(output, user_id: str, file_url: str | None, config: dict) -> dict
         sourced_fields[field_name] = {"sourced": f.sourced, "source_ref": f.source_ref}
     if output.ethics_notes:
         sourced_fields["ethics_notes"] = {"sourced": output.ethics_notes.sourced, "source_ref": output.ethics_notes.source_ref}
-    for k, v in output.key_facts.items():
-        sourced_fields[k] = {"sourced": v.sourced, "source_ref": v.source_ref}
+    for f in output.key_facts:
+        sourced_fields[f.key] = {"sourced": f.sourced, "source_ref": f.source_ref}
 
     return {
         "user_id": user_id,
@@ -111,9 +120,9 @@ def _to_db_row(output, user_id: str, file_url: str | None, config: dict) -> dict
         "best_for": val(output.best_for),
         "not_for": val(output.not_for),
         "ethics_notes": val(output.ethics_notes),
-        "key_facts": {k: v.value for k, v in output.key_facts.items()},
+        "key_facts": {f.key: f.value for f in output.key_facts},
         "sourced_fields": sourced_fields,
-        "images": [],
+        "images": images or [],
         "original_file_url": file_url,
         "word_count_target": config["word_count_target"],
         "status": "draft",

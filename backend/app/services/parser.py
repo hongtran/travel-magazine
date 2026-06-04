@@ -7,10 +7,16 @@ WORD_THRESHOLD = 100
 CHUNK_THRESHOLD = 6000
 
 @dataclass
+class ImageBlob:
+    blob: bytes
+    content_type: str
+    filename: str
+
+@dataclass
 class ParsedDocument:
     text: str
     comments: list[str]
-    image_paths: list[str]
+    images: list[ImageBlob]
     word_count: int
     too_short: bool
     needs_chunking: bool
@@ -27,17 +33,13 @@ def parse_docx(path: Path) -> ParsedDocument:
     if comments:
         text += "\n\n[AUTHOR COMMENTS]\n" + "\n".join(comments)
 
-    image_paths = [
-        rel.target_ref
-        for rel in doc.part.rels.values()
-        if "image" in rel.reltype
-    ]
+    images = _extract_images(doc)
 
     wc = len(text.split())
     return ParsedDocument(
         text=text,
         comments=comments,
-        image_paths=image_paths,
+        images=images,
         word_count=wc,
         too_short=wc < WORD_THRESHOLD,
         needs_chunking=wc > CHUNK_THRESHOLD,
@@ -56,6 +58,20 @@ def _extract_comments(doc: Document) -> list[str]:
     except Exception:
         return []
 
+def _extract_images(doc: Document) -> list[ImageBlob]:
+    images = []
+    for rel in doc.part.rels.values():
+        if "image" not in rel.reltype:
+            continue
+        try:
+            part = rel.target_part
+            ext = part.content_type.split("/")[-1]  # e.g. "png", "jpeg"
+            filename = f"{rel.target_ref.split('/')[-1]}"
+            images.append(ImageBlob(blob=part.blob, content_type=part.content_type, filename=filename))
+        except Exception:
+            continue
+    return images
+
 def _fallback_mammoth(path: Path) -> ParsedDocument:
     import mammoth
     with open(path, "rb") as f:
@@ -63,7 +79,7 @@ def _fallback_mammoth(path: Path) -> ParsedDocument:
     text = result.value
     wc = len(text.split())
     return ParsedDocument(
-        text=text, comments=[], image_paths=[],
+        text=text, comments=[], images=[],
         word_count=wc,
         too_short=wc < WORD_THRESHOLD,
         needs_chunking=wc > CHUNK_THRESHOLD,

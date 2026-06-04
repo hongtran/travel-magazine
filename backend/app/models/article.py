@@ -10,6 +10,12 @@ class BodySection(BaseModel):
     content: str
     source_ref: str | None = None
 
+class KeyFact(BaseModel):
+    key: str
+    value: str | None = None
+    sourced: bool
+    source_ref: str | None = None
+
 class ArticleOutput(BaseModel):
     title: SourcedField
     hook: SourcedField
@@ -17,7 +23,7 @@ class ArticleOutput(BaseModel):
     best_for: SourcedField
     not_for: SourcedField
     ethics_notes: SourcedField | None = None
-    key_facts: dict[str, SourcedField]
+    key_facts: list[KeyFact]
 
 class Article(BaseModel):
     id: str

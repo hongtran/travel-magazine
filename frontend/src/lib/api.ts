@@ -27,6 +27,7 @@ export async function parseDocument(file: File): Promise<ParseResponse> {
 export async function generateArticle(payload: {
   text: string
   file_url: string
+  pending_image_paths?: string[]
   article_id?: string
 }): Promise<GenerateResponse> {
   const resp = await authFetch('/articles/generate', { method: 'POST', body: JSON.stringify(payload) })

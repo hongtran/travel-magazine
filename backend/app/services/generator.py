@@ -11,7 +11,8 @@ Rules:
 - Only use information present in the provided notes
 - If a field cannot be filled from the notes, set value to null
 - NEVER invent facts, prices, dates, safety information, or details not in the notes
-- Set sourced: false for any field you inferred or extrapolated; sourced: true only for explicitly stated information
+- For sourced: set true if the information is present anywhere in the notes (even if you rephrased it for the magazine); set false only if you had to infer, extrapolate, or invent it
+- For source_ref: when sourced is true, copy a short verbatim snippet (≤ 30 words) from the notes that directly supports the field value; when sourced is false, set source_ref to null
 - Write in a warm, curious editorial voice
 {house_style}
 Target length: approximately {word_count} words for the full article body combined."""
@@ -35,7 +36,7 @@ async def generate_article(
                 ],
                 response_format=ArticleOutput,
             )
-            return response.parsed
+            return response.choices[0].message.parsed
         except Exception:
             if attempt == 1:
                 raise

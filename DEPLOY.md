@@ -12,7 +12,7 @@
 2. Go to SQL Editor → run `supabase/migrations/001_initial_schema.sql`
 3. Go to SQL Editor → run `supabase/migrations/002_storage_bucket.sql`
 4. Disable public signups: Authentication → Settings → Disable "Enable email signups"
-5. Note your project URL, anon key, service role key, and JWT secret (Settings → API)
+5. Note your project URL and API keys (Settings → API Keys)
 
 ## 2. Deploy Backend to Railway
 
@@ -20,8 +20,7 @@
 2. Select the `travel-magazine` repo, root directory: `backend`
 3. Add environment variables:
    - `SUPABASE_URL` = your Supabase project URL
-   - `SUPABASE_SERVICE_KEY` = your service role key
-   - `SUPABASE_JWT_SECRET` = your JWT secret (Settings → API → JWT Settings)
+   - `SUPABASE_SERVICE_KEY` = your secret key (Settings → API Keys → Secret keys)
    - `OPENAI_API_KEY` = your OpenAI API key
    - `FRONTEND_URL` = (set after Vercel deploy)
 4. Railway auto-detects Dockerfile and builds

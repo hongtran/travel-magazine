@@ -16,3 +16,7 @@ frontend/.next/
 
 # superpowers
 .superpowers/
+scripts/
+docs/superpowers/.DS_Store
+docs/.DS_Store
+.DS_Store

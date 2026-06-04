@@ -32,7 +32,7 @@ export function DocUploader() {
       setPendingFileUrl(parsed.file_url)
 
       setStep('generating')
-      const generated = await generateArticle({ text: parsed.text, file_url: parsed.file_url })
+      const generated = await generateArticle({ text: parsed.text, file_url: parsed.file_url, pending_image_paths: parsed.pending_image_paths })
       setStep('done')
       router.push(`/articles/${generated.id}`)
     } catch (e: any) {

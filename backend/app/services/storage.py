@@ -9,17 +9,29 @@ def upload_docx(supabase: Client, file_bytes: bytes, user_id: str) -> str:
     supabase.storage.from_(BUCKET).upload(path, file_bytes, {"content-type": DOCX_CONTENT_TYPE})
     return path
 
-def upload_pending_image(supabase: Client, image_bytes: bytes, filename: str) -> str:
+def upload_pending_image(supabase: Client, image_bytes: bytes, filename: str, content_type: str = "image/jpeg") -> str:
     path = f"pending/images/{uuid.uuid4()}-{filename}"
-    supabase.storage.from_(BUCKET).upload(path, image_bytes, {"content-type": "image/jpeg"})
+    supabase.storage.from_(BUCKET).upload(path, image_bytes, {"content-type": content_type})
+    print(f"[storage] uploaded pending image: {path} ({len(image_bytes)} bytes, {content_type})")
     return path
 
 def move_pending_images(supabase: Client, pending_paths: list[str], article_id: str) -> list[dict]:
     result = []
     for pending_path in pending_paths:
         filename = pending_path.split("/")[-1]
-        new_path = f"articles/{article_id}/images/{filename}"
-        supabase.storage.from_(BUCKET).move(pending_path, new_path)
+        new_path = f"{article_id}/images/{filename}"
+        try:
+            # Download from pending then re-upload to final path (avoids move API quirks)
+            file_bytes = supabase.storage.from_(BUCKET).download(pending_path)
+            ext = filename.rsplit(".", 1)[-1].lower()
+            content_type = "image/jpeg" if ext == "jpg" else f"image/{ext}"
+            supabase.storage.from_(BUCKET).upload(new_path, file_bytes, {"content-type": content_type})
+            supabase.storage.from_(BUCKET).remove([pending_path])
+            print(f"[storage] moved {pending_path} → {new_path} ({len(file_bytes)} bytes)")
+        except Exception as e:
+            print(f"[storage] ERROR moving {pending_path}: {e}")
+            raise
         url = supabase.storage.from_(BUCKET).get_public_url(new_path)
+        print(f"[storage] public URL: {url}")
         result.append({"url": url, "filename": filename, "caption": None})
     return result
