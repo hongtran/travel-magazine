@@ -9,6 +9,7 @@ import { GenerationProgress, type GenerationStep } from './GenerationProgress'
 export function DocUploader() {
   const [step, setStep] = useState<GenerationStep>('idle')
   const [warning, setWarning] = useState<string | null>(null)
+  const [limitError, setLimitError] = useState<string | null>(null)
   const [error, setError] = useState<string>()
   const setParsedText = useSetAtom(parsedTextAtom)
   const setPendingFileUrl = useSetAtom(pendingFileUrlAtom)
@@ -22,6 +23,7 @@ export function DocUploader() {
       return
     }
     setError(undefined)
+    setLimitError(null)
     try {
       setStep('parsing')
       const parsed = await parseDocument(file)
@@ -36,13 +38,25 @@ export function DocUploader() {
       setStep('done')
       router.push(`/articles/${generated.id}`)
     } catch (e: any) {
-      setError(e.message)
-      setStep('error')
+      if (e.message?.toLowerCase().includes('daily generation limit')) {
+        setLimitError(e.message)
+        setStep('idle')
+      } else {
+        setError(e.message)
+        setStep('error')
+      }
     }
   }
 
+  const activeError = limitError ?? (step === 'error' ? error : null)
+
   return (
     <div className="space-y-4">
+      {activeError && (
+        <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-3">
+          {activeError}
+        </div>
+      )}
       {warning && (
         <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
           {warning}
@@ -71,7 +85,7 @@ export function DocUploader() {
         </p>
         <p className="text-xs text-stone-400 mt-1">Word documents only</p>
       </div>
-      <GenerationProgress step={step} error={error} />
+      {step !== 'error' && <GenerationProgress step={step} />}
     </div>
   )
 }

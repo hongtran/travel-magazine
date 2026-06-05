@@ -27,7 +27,7 @@ export interface Article {
   not_for: string | null
   ethics_notes: string | null
   key_facts: Record<string, string> | null
-  sourced_fields: Record<string, { sourced: boolean; source_ref: string | null }> | null
+  sourced_fields: Record<string, { sourced: boolean; source_ref: string | null; verified?: boolean }> | null
   images: ArticleImage[]
   original_file_url: string | null
   regeneration_count: number

@@ -43,13 +43,20 @@ function SectionItem({ section, onSave }: { section: BodySection; onSave: (s: Bo
         <span className="text-stone-300 text-xs">{open ? '▲' : '▸'}</span>
       </button>
       {open && (
-        <Textarea
-          className="border-0 border-t rounded-none text-sm resize-none focus-visible:ring-0"
-          value={draft}
-          rows={6}
-          onChange={e => setDraft(e.target.value)}
-          onBlur={() => onSave({ ...section, content: draft })}
-        />
+        <>
+          <Textarea
+            className="border-0 border-t rounded-none text-sm resize-none focus-visible:ring-0"
+            value={draft}
+            rows={6}
+            onChange={e => setDraft(e.target.value)}
+            onBlur={() => onSave({ ...section, content: draft })}
+          />
+          {section.source_ref && (
+            <p className="px-3 pb-2.5 text-[11px] text-stone-400 italic leading-snug">
+              From notes: &ldquo;{section.source_ref}&rdquo;
+            </p>
+          )}
+        </>
       )}
     </div>
   )

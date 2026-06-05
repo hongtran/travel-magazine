@@ -1,4 +1,5 @@
 import uuid, tempfile
+from datetime import date
 from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from app.auth import get_current_user_id
@@ -69,6 +70,22 @@ async def generate(
     sb = get_supabase()
     config = sb.table("app_config").select("*").eq("id", 1).single().execute().data
 
+    # Enforce daily generation limit
+    max_daily = config.get("max_daily_generations", 5)
+    today_count = (
+        sb.table("articles")
+        .select("id", count="exact")
+        .eq("user_id", user_id)
+        .gte("created_at", date.today().isoformat())
+        .execute()
+        .count
+    )
+    if today_count >= max_daily:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Daily generation limit reached ({today_count}/{max_daily}). Try again tomorrow.",
+        )
+
     # Enforce regeneration limit
     article_id_existing = body.get("article_id")
     if article_id_existing:
@@ -99,7 +116,6 @@ async def generate(
     return {"id": article_id, "article": {**row, "id": article_id}}
 
 def _to_db_row(output, user_id: str, file_url: str | None, config: dict, images: list[dict] | None = None) -> dict:
-    print("LLM output", output)
     def val(f):
         return f.value if f else None
 

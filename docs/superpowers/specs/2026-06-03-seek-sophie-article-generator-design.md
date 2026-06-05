@@ -102,7 +102,7 @@ articles
   not_for             text
   ethics_notes        text        -- nullable
   key_facts           jsonb       -- {price_range, duration, season, ...} flexible
-  sourced_fields      jsonb       -- {field_name: {sourced: bool, source_ref: text}}
+  sourced_fields      jsonb       -- {field_name: {sourced: bool, source_ref: text, verified?: bool}}
   images              jsonb       DEFAULT '[]'            -- [{url, filename, caption}]
   original_file_url   text        -- Supabase Storage path to the .docx
   regeneration_count  int         DEFAULT 0               -- max from app_config
@@ -115,10 +115,11 @@ articles
 
 ```sql
 app_config
-  id                  int   PRIMARY KEY DEFAULT 1
-  word_count_target   int   DEFAULT 800
-  max_regenerations   int   DEFAULT 3
-  house_style_notes   text  -- injected into GPT system prompt; nullable
+  id                      int   PRIMARY KEY DEFAULT 1
+  word_count_target       int   DEFAULT 800
+  max_regenerations       int   DEFAULT 3
+  max_daily_generations   int   DEFAULT 5   -- per-user daily generation cap
+  house_style_notes       text              -- injected into GPT system prompt; nullable
 ```
 
 ---
@@ -158,6 +159,8 @@ Using **python-docx**:
 **Multi-experience detection:** If the notes appear to contain multiple distinct experiences (detected by prompt heuristic), return a `warning: "multiple_experiences"` flag. Frontend shows: *"These notes seem to cover more than one experience. For best results, split into separate files."*
 
 ### Stage 2 — Generate (`POST /articles/generate`)
+
+**Daily generation limit:** Before calling the LLM, the endpoint counts articles created by this user since midnight (`created_at >= today`). If the count meets or exceeds `app_config.max_daily_generations` (default 5), the request is rejected with HTTP 429. The limit is configurable by admins via the `app_config` table without a code deploy.
 
 GPT-4o with **Structured Outputs** (Pydantic schema). The system prompt includes:
 - Seek Sophie editorial voice (from `app_config.house_style_notes`)
@@ -201,9 +204,23 @@ On failure: retry once. If the second attempt fails, return HTTP 500 with a retr
 
 ## Hallucination Handling
 
-Fields with `sourced: false` are displayed in the editor with an **amber highlight** and a tooltip: *"This wasn't found directly in your notes — please verify before publishing."*
+### Source citation display
 
-Authors must actively dismiss or correct amber fields. Publishing an article with unsourced fields shows a confirmation dialog: *"X fields are unverified. Publish anyway?"*
+Every field carries a `source_ref` — a verbatim ≤30-word snippet from the original notes that the LLM cited as the basis for its value (set when `sourced: true`; null when `sourced: false`). This snippet is rendered below the field value in the editor as small italic text: *From notes: "…"*. Authors can cross-check the citation against their notes without leaving the editor.
+
+### Unsourced field state (`sourced: false`)
+
+Fields where the LLM could not find direct support in the notes are displayed with an **amber highlight** and a "Verify — not in notes" badge.
+
+Authors have two options:
+- **Edit the field** — replace the LLM's guess with the correct value.
+- **Mark as verified** — click "Mark as verified" to record that they've reviewed the field and confirm it's correct despite the LLM's uncertainty. The field transitions from amber to a neutral "✓ Verified" state.
+
+Verification is stored as `verified: true` in `sourced_fields[field_name]`. The LLM's original `sourced: false` is preserved — `verified` is a separate author layer, not a mutation of the LLM metadata.
+
+### Publishing
+
+Publishing an article where any field is `sourced: false` **and** `verified` is not set shows a confirmation dialog listing the unreviewed field names: *"X fields are unverified. Publish anyway?"* Fields that have been explicitly verified by the author are excluded from this count and do not trigger the dialog.
 
 ---
 
@@ -211,12 +228,12 @@ Authors must actively dismiss or correct amber fields. Publishing an article wit
 
 ```
 ┌─────────────────────────────────────────────────┐
-│  ← All Articles          Saving…  [Regen] [Pub] │  ← toolbar
+│  ← All Articles                    Saving… [Pub]│  ← toolbar
 ├────────────────────────┬────────────────────────┤
 │  FIELDS                │  PREVIEW               │
 │                        │                        │
 │  Title          [edit] │  Komodo by Boat:       │
-│  Hook           [edit] │  A Week in the Wild    │
+│  From notes: "Komodo"  │  A Week in the Wild    │
 │                        │  ─────                 │
 │  Body Sections         │  There's a moment...   │
 │  ▸ Getting There       │                        │
@@ -224,10 +241,13 @@ Authors must actively dismiss or correct amber fields. Publishing an article wit
 │  ▸ Snorkelling...      │  Fly into Labuan...    │
 │                        │                        │
 │  Best For      [amber] │  ✦ Best for wildlife   │
-│  Not For        [edit] │  ✗ Not for: luxury     │
+│  Verify — not in notes │  ✗ Not for: luxury     │
+│  [Mark as verified]    │                        │
+│  Not For    [✓Verified]│  💰 $120–180  ⏱ 5–7d  │
 │                        │                        │
-│  Key Facts      [edit] │  💰 $120–180  ⏱ 5–7d  │
-│  Images         [list] │  [image thumbnails]    │
+│  Key Facts      [edit] │  [image thumbnails]    │
+│  price  [amber][Verify]│                        │
+│  From notes: "…"       │                        │
 │                        │                        │
 └────────────────────────┴────────────────────────┘
 ```
@@ -235,9 +255,10 @@ Authors must actively dismiss or correct amber fields. Publishing an article wit
 - **Toolbar left:** `← All Articles` link navigates back to `/dashboard`
 - Each field is inline-editable (click to edit)
 - Preview re-renders live as fields are edited
-- `PATCH /articles/{id}` called on field blur (auto-save when author moves away from a field) and on explicit Save button click
-- Amber = `sourced: false` — author must verify
-- Regenerate button disabled and greyed at limit (3/3)
+- `PATCH /articles/{id}` called on field blur (auto-save)
+- Sourced fields show `From notes: "…"` citation snippet below the value
+- Amber = `sourced: false && !verified` — author should edit or verify
+- Verified = `sourced: false && verified: true` — author has signed off, shown as "✓ Verified"
 
 ## New Article Page (`/articles/new`)
 
@@ -246,14 +267,15 @@ Authors must actively dismiss or correct amber fields. Publishing an article wit
 - Subheading: "Upload your notes and we'll generate a structured magazine article."
 - `.docx` upload widget below the heading
 
+**Error display:** All errors (wrong file type, document too short, daily limit reached, generation failure) render as a consistent red banner (`bg-red-50`, `border-red-200`, `text-red-700`) above the upload widget. The widget remains active after an error so the author can immediately try again. The in-progress states (parsing, generating, done) render as a separate progress bar below the widget and are never shown simultaneously with an error.
+
 ---
 
 ## Regeneration
 
-- `regeneration_count` persisted per article
-- FastAPI returns HTTP 429 at limit: *"Regeneration limit reached (3/3)"*
-- Each regeneration overwrites article fields (no version history in v1)
-- Count displayed in the editor: *"Regenerate (1/3 used)"*
+Out of scope for v1. Regeneration without author-controlled parameters (voice, tone, style, word count override) is not a reliable workflow — it produces near-identical output and gives authors no direction. The edit-in-place workflow covers minor corrections; the generator's built-in one-retry handles transient LLM failures.
+
+Regeneration will be introduced in v2 alongside style controls. The `regeneration_count` column and the `POST /articles/generate` endpoint's `article_id` parameter are retained in the schema for forward compatibility.
 
 ---
 
@@ -279,18 +301,20 @@ Authors must actively dismiss or correct amber fields. Publishing an article wit
 | Tracked changes / comments | Extracted alongside body text and included in parsed payload |
 | GPT-4o timeout / malformed response | Retry once; on second failure return 500 with a frontend retry button |
 | Regeneration limit reached | HTTP 429, button disabled in UI |
+| Daily generation limit reached | HTTP 429 before LLM call; red banner: "Daily generation limit reached (N/N). Try again tomorrow." |
 | Unsourced fields at publish | Confirmation dialog listing unverified fields |
 
 ---
 
 ## Error Handling
 
-- Parse errors: 422 with user-facing message shown inline
-- Generation errors: 500 with a retry button (parsed text preserved in frontend state)
+- Parse errors: 422 with user-facing message shown as red banner above upload widget
+- Generation errors: 500 shown as red banner; upload widget stays active for retry
+- Daily generation limit: 429 shown as red banner; upload widget stays active (limit resets next day)
 - Auth errors: 401, redirect to `/login`
 - Not found: 404
-- Regeneration limit: 429 with remaining count
-- All error responses: `{error: string, code: string}`
+- Regeneration limit: 429 (retained in backend for forward compatibility; UI button removed in v1)
+- All error responses: `{detail: string}`
 
 ---
 
@@ -326,3 +350,4 @@ Backend (Railway):
 - Image-to-section assignment
 - Article search or filtering
 - Reviewer / approver role
+- Regeneration with style controls (voice, tone, word count override) — v2

@@ -17,7 +17,7 @@ export function PublishButton({ article, onPublished }: Props) {
   const [loading, setLoading] = useState(false)
 
   const unsourcedFields = Object.entries(article.sourced_fields ?? {})
-    .filter(([, v]) => !v.sourced)
+    .filter(([, v]) => !v.sourced && !v.verified)
     .map(([k]) => k.replace(/_/g, ' '))
 
   async function publish() {

@@ -6,14 +6,17 @@ interface Props {
   label: string
   value: string | null
   sourced?: boolean
+  sourceRef?: string | null
+  verified?: boolean
   onSave: (value: string) => void
+  onVerify?: () => void
   multiline?: boolean
 }
 
-export function FieldEditor({ label, value, sourced = true, onSave, multiline }: Props) {
+export function FieldEditor({ label, value, sourced = true, sourceRef, verified, onSave, onVerify, multiline }: Props) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(value ?? '')
-  const amber = !sourced
+  const amber = !sourced && !verified
 
   function handleBlur() {
     setEditing(false)
@@ -31,6 +34,9 @@ export function FieldEditor({ label, value, sourced = true, onSave, multiline }:
             Verify — not in notes
           </span>
         )}
+        {!sourced && verified && (
+          <span className="text-[10px] text-green-600 font-medium">✓ Verified</span>
+        )}
       </div>
       {editing ? (
         <Textarea
@@ -42,12 +48,27 @@ export function FieldEditor({ label, value, sourced = true, onSave, multiline }:
           rows={multiline ? 5 : 2}
         />
       ) : (
-        <p
-          className="text-sm text-stone-800 cursor-text whitespace-pre-wrap min-h-[1.5rem]"
-          onClick={() => { setDraft(value ?? ''); setEditing(true) }}
-        >
-          {value ?? <span className="text-stone-300 italic">Click to edit</span>}
-        </p>
+        <>
+          <p
+            className="text-sm text-stone-800 cursor-text whitespace-pre-wrap min-h-[1.5rem]"
+            onClick={() => { setDraft(value ?? ''); setEditing(true) }}
+          >
+            {value ?? <span className="text-stone-300 italic">Click to edit</span>}
+          </p>
+          {sourceRef && (
+            <p className="text-[11px] text-stone-400 italic mt-1 leading-snug">
+              From notes: &ldquo;{sourceRef}&rdquo;
+            </p>
+          )}
+          {amber && onVerify && (
+            <button
+              onClick={onVerify}
+              className="text-[11px] text-amber-700 underline hover:text-amber-900 mt-0.5"
+            >
+              Mark as verified
+            </button>
+          )}
+        </>
       )}
     </div>
   )
