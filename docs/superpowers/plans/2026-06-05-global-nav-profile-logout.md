@@ -59,6 +59,8 @@ export function AppNav() {
   if (excluded) return null
 
   async function handleSignOut() {
+    // createBrowserClient (@supabase/ssr) uses cookies as auth storage.
+    // signOut() removes those cookies so the middleware sees no session on the next request.
     await createClient().auth.signOut()
     router.push('/login')
   }
@@ -89,6 +91,7 @@ export function AppNav() {
 - `excluded` is computed before the `useEffect` so the effect can skip the Supabase call on auth routes.
 - `displayName` stays `null` until the user fetch resolves — the right side of the nav renders nothing during that window (no flash).
 - `user.user_metadata?.full_name` is populated when Supabase is configured to store the name at invite time; it falls back to `user.email` otherwise.
+- **Cookie/storage clearing on sign-out:** `createBrowserClient` from `@supabase/ssr` stores the session in cookies (not just `localStorage`). Calling `signOut()` removes those cookies, so the Next.js middleware sees no valid session on the very next request. No manual cookie deletion is needed.
 
 - [ ] **Step 2: Verify TypeScript compiles**
 
