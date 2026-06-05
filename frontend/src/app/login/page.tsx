@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -8,16 +8,31 @@ export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [sent, setSent] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [formError, setFormError] = useState<string | null>(null)
+  const [urlError, setUrlError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    setUrlError(params.get('error'))
+  }, [])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
+    setFormError(null)
     const supabase = createClient()
-    await supabase.auth.signInWithOtp({
+    const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: `${window.location.origin}/dashboard` },
+      options: {
+        shouldCreateUser: false,
+        emailRedirectTo: `${window.location.origin}/auth/confirm`,
+      },
     })
-    setSent(true)
+    if (error) {
+      setFormError("This email isn't registered. Contact your admin to get an invite.")
+    } else {
+      setSent(true)
+    }
     setLoading(false)
   }
 
@@ -34,6 +49,11 @@ export default function LoginPage() {
           </p>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
+            {(formError || urlError === 'invite_expired') && (
+              <p className="text-sm text-red-600">
+                {formError ?? 'This link has expired or is invalid. Contact your admin.'}
+              </p>
+            )}
             <Input
               type="email"
               placeholder="you@seeksophie.com"
