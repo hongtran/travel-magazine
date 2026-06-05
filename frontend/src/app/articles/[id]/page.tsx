@@ -45,7 +45,7 @@ export default function ArticleEditorPage() {
   const sourced = article.sourced_fields ?? {}
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden">
+    <div className="h-[calc(100vh-56px)] flex flex-col overflow-hidden">
       {/* Toolbar */}
       <header className="flex items-center justify-between px-6 py-3 border-b bg-white shrink-0">
         <Link href="/dashboard" className="text-sm font-medium text-stone-700 hover:text-stone-900 flex items-center gap-1">
