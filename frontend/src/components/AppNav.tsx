@@ -10,11 +10,13 @@ export function AppNav() {
   const router = useRouter()
   const [displayName, setDisplayName] = useState<string | null>(null)
 
+  const supabase = createClient()
   const excluded = pathname === '/login' || pathname.startsWith('/auth/')
 
   useEffect(() => {
     if (excluded) return
-    createClient().auth.getUser().then(({ data: { user } }) => {
+    supabase.auth.getUser().then(({ data: { user }, error }) => {
+      if (error) { console.error('Failed to fetch user:', error.message); return }
       if (!user) return
       setDisplayName(user.user_metadata?.full_name ?? user.email ?? null)
     })
@@ -25,7 +27,8 @@ export function AppNav() {
   async function handleSignOut() {
     // createBrowserClient (@supabase/ssr) uses cookies as auth storage.
     // signOut() removes those cookies so the middleware sees no session on the next request.
-    await createClient().auth.signOut()
+    const { error } = await supabase.auth.signOut()
+    if (error) console.error('Sign out error:', error.message)
     router.push('/login')
   }
 
