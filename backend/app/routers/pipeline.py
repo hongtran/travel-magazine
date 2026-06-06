@@ -2,6 +2,7 @@ import uuid, tempfile
 from datetime import date
 from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from pydantic import BaseModel
 from app.auth import get_current_user_id
 from app.db import get_supabase
 from app.services.parser import parse_docx
@@ -12,6 +13,13 @@ from app.services.storage import upload_docx, upload_pending_image, move_pending
 router = APIRouter(prefix="/articles", tags=["pipeline"])
 
 DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+
+class GenerateRequest(BaseModel):
+    text: str
+    file_url: str | None = None
+    pending_image_paths: list[str] = []
+    article_id: str | None = None
 
 @router.post("/parse")
 async def parse(
@@ -58,15 +66,9 @@ async def parse(
 
 @router.post("/generate")
 async def generate(
-    body: dict,
+    body: GenerateRequest,
     user_id: str = Depends(get_current_user_id),
 ):
-    text = body.get("text", "")
-    file_url = body.get("file_url")
-    pending_image_paths: list[str] = body.get("pending_image_paths") or []
-    if not text:
-        raise HTTPException(status_code=422, detail="text is required")
-
     sb = get_supabase()
     config = sb.table("app_config").select("*").eq("id", 1).single().execute().data
 
@@ -87,7 +89,7 @@ async def generate(
         )
 
     # Enforce regeneration limit
-    article_id_existing = body.get("article_id")
+    article_id_existing = body.article_id
     if article_id_existing:
         row = sb.table("articles").select("regeneration_count").eq("id", article_id_existing).single().execute().data
         if row and row["regeneration_count"] >= config["max_regenerations"]:
@@ -95,7 +97,7 @@ async def generate(
 
     try:
         output = await generate_article(
-            text=text,
+            text=body.text,
             word_count_target=config["word_count_target"],
             house_style=config.get("house_style_notes") or "",
         )
@@ -104,8 +106,8 @@ async def generate(
 
     article_id = article_id_existing or str(uuid.uuid4())
 
-    images = move_pending_images(sb, pending_image_paths, article_id) if pending_image_paths else []
-    row = _to_db_row(output, user_id, file_url, config, images)
+    images = move_pending_images(sb, body.pending_image_paths, article_id) if body.pending_image_paths else []
+    row = _to_db_row(output, user_id, body.file_url, config, images)
 
     if article_id_existing:
         row["regeneration_count"] = (row.get("regeneration_count") or 0) + 1

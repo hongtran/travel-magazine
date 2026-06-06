@@ -8,6 +8,7 @@ class SourcedField(BaseModel):
 class BodySection(BaseModel):
     section_title: str
     content: str
+    sourced: bool
     source_ref: str | None = None
 
 class KeyFact(BaseModel):

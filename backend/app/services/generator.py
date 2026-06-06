@@ -1,8 +1,14 @@
-from openai import OpenAI
+import asyncio
+import logging
+
+from openai import AsyncOpenAI
+
 from app.config import settings
 from app.models.article import ArticleOutput
 
-openai_client = OpenAI(api_key=settings.openai_api_key)
+log = logging.getLogger(__name__)
+
+openai_client = AsyncOpenAI(api_key=settings.openai_api_key)
 
 SYSTEM_PROMPT = """\
 You are an editorial assistant for a travel magazine. Convert rough author notes into a structured article.
@@ -28,7 +34,7 @@ async def generate_article(
     )
     for attempt in range(2):
         try:
-            response = openai_client.beta.chat.completions.parse(
+            response = await openai_client.beta.chat.completions.parse(
                 model="gpt-4o",
                 messages=[
                     {"role": "system", "content": system},
@@ -36,7 +42,12 @@ async def generate_article(
                 ],
                 response_format=ArticleOutput,
             )
-            return response.choices[0].message.parsed
-        except Exception:
+            result = response.choices[0].message.parsed
+            if result is None:
+                raise ValueError("OpenAI returned no structured output")
+            return result
+        except Exception as exc:
+            log.warning("OpenAI call failed (attempt %d): %s", attempt, exc)
             if attempt == 1:
                 raise
+            await asyncio.sleep(1)
